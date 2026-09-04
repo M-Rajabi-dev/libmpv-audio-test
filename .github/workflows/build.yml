@@ -104,9 +104,9 @@ jobs:
                   --disable-protocols
                   --disable-filters
                   --enable-schannel
-                  --enable-decoder=aac*,ac3,alac,als,ape,atrac*,eac3,flac,gsm*,mp1*,mp2*,mp3*,mpc*,opus,ra*,ralf,shorten,tak,tta,vorbis,wavpack,wma*,pcm*,dsd*,dca,mlp,truehd
-                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,avi,flac,flv,matroska,mov,m4v,mp3,mpc*,ogg,pcm*,rm,shorten,tak,tta,wav,wv,xwma,dsf,dts,dtshd,truehd
-                  --enable-parser=aac*,ac3,cook,flac,gsm,mpegaudio,tak,vorbis,dca
+                  --enable-decoder=aac*,ac3,alac,als,ape,eac3,flac,mp3*,opus,vorbis,wavpack,wma*,pcm*
+                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,flac,matroska,mov,m4v,mp3,ogg,pcm*,wav,wv
+                  --enable-parser=aac*,ac3,flac,mpegaudio,opus,vorbis
                   --enable-protocol=async,cache,data,file,ftp,hls,http,httpproxy,https,pipe,rtp,subfile,tcp,tls
                   --enable-filter=equalizer,afftdn,dynaudnorm,compand,aresample,volume,aformat,atempo,afade,amix,anull,bass,treble,channelmap,channelsplit,join,pan,silencedetect,silenceremove
                   --enable-network
@@ -153,7 +153,14 @@ jobs:
                   -Dlcms=disabled
                   -Dglslang=disabled
                   -Dopengl=disabled
+                  -Ddovi=disabled
+                  -Dlibdovi=disabled
+                  -Dxxhash=disabled
+                  -Dunwind=disabled
                   -Ddemos=false
+                  -Dtests=false
+                  -Dbench=false
+                  -Dfuzz=false
                   -Ddebug=false
                   -Db_ndebug=true
               BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
@@ -303,7 +310,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/')
         with:
-          tag_name: libmpv-audio-test-release
-          name: libmpv-audio-test
+          tag_name: libmpv-audio-test-v2
+          name: libmpv-audio-test-v2
           make_latest: true
           files: mpv-winbuild/build/mpv-dev-*/libmpv-2.dll
