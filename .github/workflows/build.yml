@@ -27,12 +27,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential checkinstall bison flex gettext git ninja-build cmake yasm nasm automake pkgconf libtool libtool-bin gcc-multilib g++-multilib clang lld libc++1 libc++abi1 libgmp-dev libmpfr-dev libmpc-dev libgcrypt-dev gperf ragel texinfo autopoint re2c python3-pip unzip p7zip-full curl ccache binfmt-support
-          pip3 install meson mako jinja2
+          sudo apt-get install -y build-essential bison flex gettext git ninja-build cmake yasm nasm automake pkgconf libtool libtool-bin gcc-multilib g++-multilib clang lld libc++1 libc++abi1 libgmp-dev libmpfr-dev libmpc-dev libgcrypt-dev gperf ragel texinfo autopoint re2c python3-pip unzip p7zip-full curl ccache binutils-mingw-w64-x86-64
+          sudo pip3 install meson mako jsonschema
 
       - name: Configure package build specifications
+        working-directory: mpv-winbuild
         run: |
-          cd mpv-winbuild
           cp -r ../repo/stub packages/libass-stub
 
           cat << 'EOF' > packages/libass.cmake
@@ -57,59 +57,63 @@ jobs:
                   zlib
               GIT_REPOSITORY https://github.com/FFmpeg/FFmpeg.git
               SOURCE_DIR ${SOURCE_LOCATION}
-              GIT_CLONE_FLAGS "--filter=tree:0"
-              GIT_SUBMODULES ""
+              GIT_CLONE_FLAGS "--sparse --filter=tree:0"
+              GIT_CLONE_POST_COMMAND "sparse-checkout set --no-cone /* !tests/ref/fate"
               UPDATE_COMMAND ""
-              CONFIGURE_COMMAND ${EXEC} <SOURCE_DIR>/configure
+              CONFIGURE_COMMAND ${EXEC} CONF=1 <SOURCE_DIR>/configure
                   --cross-prefix=${TARGET_ARCH}-
                   --prefix=${MINGW_INSTALL_PREFIX}
                   --arch=${TARGET_CPU}
                   --target-os=mingw32
-                  --target-exec=wine
                   --pkg-config-flags=--static
                   --enable-cross-compile
                   --enable-runtime-cpudetect
-                  --extra-cflags='-Wno-error=int-conversion -Os'
-                  --extra-ldflags='-Wl,--nxcompat,--dynamicbase -Wl,--as-needed'
-                  --disable-debug
+                  --enable-gpl
+                  --enable-version3
                   --disable-doc
                   --disable-programs
-                  --disable-avdevice
-                  --disable-postproc
-                  --disable-encoders
-                  --disable-muxers
-                  --disable-devices
-                  --disable-pthreads
-                  --enable-w32threads
-                  --enable-network
-                  --enable-schannel
-                  --disable-autodetect
-                  --disable-videotoolbox
-                  --disable-audiotoolbox
-                  --disable-v4l2-m2m
+                  --disable-gray
+                  --disable-swscale-alpha
+                  --disable-bsfs
+                  --disable-amf
+                  --disable-cuda
+                  --disable-nvdec
+                  --disable-nvenc
+                  --disable-cuvid
+                  --disable-dxva2
+                  --disable-libmfx
+                  --disable-d3d11va
                   --disable-vaapi
                   --disable-vdpau
-                  --disable-cuda
-                  --disable-cuvid
-                  --disable-nvenc
-                  --disable-nvdec
-                  --disable-amf
-                  --disable-d3d11va
-                  --disable-dxva2
-                  --disable-vulkan
-                  --disable-pixelutils
-                  --enable-zlib
-                  --enable-protocol=async,cache,data,file,ftp,hls,http,httpproxy,https,pipe,rtp,subfile,tcp,tls
+                  --disable-videotoolbox
+                  --disable-audiotoolbox
+                  --enable-small
+                  --enable-hwaccels
+                  --enable-optimizations
+                  --enable-avutil
+                  --enable-avcodec
+                  --enable-avfilter
+                  --enable-avformat
+                  --enable-swscale
+                  --enable-swresample
+                  --disable-muxers
                   --disable-decoders
-                  --enable-decoder=aac*,ac3,alac,als,ape,atrac*,eac3,flac,gsm*,mp1*,mp2*,mp3*,mpc*,opus,ra*,ralf,shorten,tak,tta,vorbis,wavpack,wma*,pcm*,dsd*,dca,mlp,truehd
+                  --disable-encoders
                   --disable-demuxers
-                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,avi,flac,flv,matroska,mov,m4v,mp3,mpc*,ogg,pcm*,rm,shorten,tak,tta,wav,wv,xwma,dsf,dts,dtshd,truehd
                   --disable-parsers
-                  --enable-parser=aac*,ac3,flac,mpegaudio,opus,vorbis,dca,mlp
+                  --disable-protocols
                   --disable-filters
-                  --enable-filter=a*,*resample*,volume*,equalizer*,loudnorm,dynaudnorm,bass,treble,crossfeed,sidechain*,pan,channel*,join,split,afftdn,agate,compand,silenceremove
-              BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
-              INSTALL_COMMAND ${EXEC} ninja -C <BINARY_DIR> install
+                  --enable-schannel
+                  --enable-decoder=aac*,ac3,alac,als,ape,atrac*,eac3,flac,gsm*,mp1*,mp2*,mp3*,mpc*,opus,ra*,ralf,shorten,tak,tta,vorbis,wavpack,wma*,pcm*,dsd*,dca,mlp,truehd
+                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,avi,flac,flv,matroska,mov,m4v,mp3,mpc*,ogg,pcm*,rm,shorten,tak,tta,wav,wv,xwma,dsf,dts,dtshd,truehd
+                  --enable-parser=aac*,ac3,cook,flac,gsm,mpegaudio,tak,vorbis,dca
+                  --enable-protocol=async,cache,data,file,ftp,hls,http,httpproxy,https,pipe,rtp,subfile,tcp,tls
+                  --enable-filter=equalizer,afftdn,dynaudnorm,compand,aresample,volume,aformat,atempo,afade,amix,anull,bass,treble,channelmap,channelsplit,join,pan,silencedetect,silenceremove
+                  --enable-network
+                  ${ffmpeg_lto}
+                  --extra-cflags='-Wno-error=int-conversion -Os'
+              BUILD_COMMAND ${MAKE}
+              INSTALL_COMMAND ${MAKE} install
               LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
           )
 
@@ -122,9 +126,10 @@ jobs:
           get_property(src_fast_float TARGET fast_float PROPERTY _EP_SOURCE_DIR)
           ExternalProject_Add(libplacebo
               DEPENDS
+                  vulkan-header
                   glad
                   fast_float
-                  vulkan-header
+                  xxhash
               GIT_REPOSITORY https://github.com/haasn/libplacebo.git
               SOURCE_DIR ${SOURCE_LOCATION}
               GIT_CLONE_FLAGS "--filter=tree:0"
@@ -272,7 +277,7 @@ jobs:
 
       - name: Configure CMake
         working-directory: mpv-winbuild
-        run: cmake -DTARGET_ARCH=x86_64-w64-mingw32 -G Ninja -S . -B build
+        run: cmake -DTARGET_ARCH=x86_64-w64-mingw32 -G Ninja -H. -Bbuild
 
       - name: Build mpv
         working-directory: mpv-winbuild
