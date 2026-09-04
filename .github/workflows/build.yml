@@ -105,7 +105,7 @@ jobs:
                   --disable-filters
                   --enable-schannel
                   --enable-decoder=aac*,ac3,alac,als,ape,eac3,flac,mp3*,opus,vorbis,wavpack,wma*,pcm*
-                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,flac,matroska,mov,m4v,mp3,ogg,pcm*,wav,wv
+                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,avi,flac,flv,matroska,mov,m4v,mp3,ogg,pcm*,wav,wv
                   --enable-parser=aac*,ac3,flac,mpegaudio,opus,vorbis
                   --enable-protocol=async,cache,data,file,ftp,hls,http,httpproxy,https,pipe,rtp,subfile,tcp,tls
                   --enable-filter=equalizer,afftdn,dynaudnorm,compand,aresample,volume,aformat,atempo,afade,amix,anull,bass,treble,channelmap,channelsplit,join,pan,silencedetect,silenceremove
@@ -310,7 +310,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/')
         with:
-          tag_name: libmpv-audio-test-v2
-          name: libmpv-audio-test-v2
+          tag_name: libmpv-audio-test-v3
+          name: libmpv-audio-test-v3
           make_latest: true
           files: mpv-winbuild/build/mpv-dev-*/libmpv-2.dll
