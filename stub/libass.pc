@@ -1,0 +1,10 @@
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: libass
+Description: LibASS stub for audio-only mpv
+Version: 0.17.5
+Libs: -L${libdir} -lass
+Cflags: -I${includedir}

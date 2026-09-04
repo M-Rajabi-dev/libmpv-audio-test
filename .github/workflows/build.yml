@@ -1,0 +1,274 @@
+name: Build mpv audio-only test
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          path: 'repo'
+
+      - name: Checkout shinchiro/mpv-winbuild-cmake
+        uses: actions/checkout@v4
+        with:
+          repository: 'shinchiro/mpv-winbuild-cmake'
+          path: 'mpv-winbuild'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential checkinstall bison flex gettext git ninja-build cmake yasm nasm automake pkgconf libtool libtool-bin gcc-multilib g++-multilib clang lld libc++1 libc++abi1 libgmp-dev libmpfr-dev libmpc-dev libgcrypt-dev gperf ragel texinfo autopoint re2c python3-pip unzip p7zip-full curl ccache binfmt-support
+          pip3 install meson mako jinja2
+
+      - name: Configure package build specifications
+        run: |
+          cd mpv-winbuild
+          cp -r ../repo/stub packages/libass-stub
+
+          cat << 'EOF' > packages/libass.cmake
+          ExternalProject_Add(libass
+              SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libass-stub
+              CONFIGURE_COMMAND ${EXEC} CONF=1 cmake -H<SOURCE_DIR> -B<BINARY_DIR>
+                  -G Ninja
+                  -DCMAKE_BUILD_TYPE=Release
+                  -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+                  -DCMAKE_INSTALL_PREFIX=${MINGW_INSTALL_PREFIX}
+                  -DCMAKE_FIND_ROOT_PATH=${MINGW_INSTALL_PREFIX}
+              BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
+              INSTALL_COMMAND ${EXEC} ninja -C <BINARY_DIR> install
+              LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
+          )
+          cleanup(libass install)
+          EOF
+
+          cat << 'EOF' > packages/ffmpeg.cmake
+          ExternalProject_Add(ffmpeg
+              DEPENDS
+                  zlib
+              GIT_REPOSITORY https://github.com/FFmpeg/FFmpeg.git
+              SOURCE_DIR ${SOURCE_LOCATION}
+              GIT_CLONE_FLAGS "--filter=tree:0"
+              GIT_SUBMODULES ""
+              UPDATE_COMMAND ""
+              CONFIGURE_COMMAND ${EXEC} <SOURCE_DIR>/configure
+                  --cross-prefix=${TARGET_ARCH}-
+                  --prefix=${MINGW_INSTALL_PREFIX}
+                  --arch=${TARGET_CPU}
+                  --target-os=mingw32
+                  --target-exec=wine
+                  --pkg-config-flags=--static
+                  --enable-cross-compile
+                  --enable-runtime-cpudetect
+                  --extra-cflags='-Wno-error=int-conversion -Os'
+                  --extra-ldflags='-Wl,--nxcompat,--dynamicbase -Wl,--as-needed'
+                  --disable-debug
+                  --disable-doc
+                  --disable-programs
+                  --disable-avdevice
+                  --disable-postproc
+                  --disable-encoders
+                  --disable-muxers
+                  --disable-devices
+                  --disable-pthreads
+                  --enable-w32threads
+                  --enable-network
+                  --enable-schannel
+                  --disable-autodetect
+                  --disable-videotoolbox
+                  --disable-audiotoolbox
+                  --disable-v4l2-m2m
+                  --disable-vaapi
+                  --disable-vdpau
+                  --disable-cuda
+                  --disable-cuvid
+                  --disable-nvenc
+                  --disable-nvdec
+                  --disable-amf
+                  --disable-d3d11va
+                  --disable-dxva2
+                  --disable-vulkan
+                  --disable-pixelutils
+                  --enable-zlib
+                  --enable-protocol=async,cache,data,file,ftp,hls,http,httpproxy,https,pipe,rtp,subfile,tcp,tls
+                  --disable-decoders
+                  --enable-decoder=aac*,ac3,alac,als,ape,atrac*,eac3,flac,gsm*,mp1*,mp2*,mp3*,mpc*,opus,ra*,ralf,shorten,tak,tta,vorbis,wavpack,wma*,pcm*,dsd*,dca,mlp,truehd
+                  --disable-demuxers
+                  --enable-demuxer=aac,ac3,aiff,ape,asf,au,avi,flac,flv,matroska,mov,m4v,mp3,mpc*,ogg,pcm*,rm,shorten,tak,tta,wav,wv,xwma,dsf,dts,dtshd,truehd
+                  --disable-parsers
+                  --enable-parser=aac*,ac3,flac,mpegaudio,opus,vorbis,dca,mlp
+                  --disable-filters
+                  --enable-filter=a*,*resample*,volume*,equalizer*,loudnorm,dynaudnorm,bass,treble,crossfeed,sidechain*,pan,channel*,join,split,afftdn,agate,compand,silenceremove
+              BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
+              INSTALL_COMMAND ${EXEC} ninja -C <BINARY_DIR> install
+              LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
+          )
+
+          force_rebuild_git(ffmpeg)
+          cleanup(ffmpeg install)
+          EOF
+
+          cat << 'EOF' > packages/libplacebo.cmake
+          get_property(src_glad TARGET glad PROPERTY _EP_SOURCE_DIR)
+          get_property(src_fast_float TARGET fast_float PROPERTY _EP_SOURCE_DIR)
+          ExternalProject_Add(libplacebo
+              DEPENDS
+                  glad
+                  fast_float
+                  vulkan-header
+              GIT_REPOSITORY https://github.com/haasn/libplacebo.git
+              SOURCE_DIR ${SOURCE_LOCATION}
+              GIT_CLONE_FLAGS "--filter=tree:0"
+              GIT_SUBMODULES ""
+              UPDATE_COMMAND ""
+              CONFIGURE_COMMAND ""
+              COMMAND bash -c "rm -rf <SOURCE_DIR>/3rdparty/glad"
+              COMMAND bash -c "rm -rf <SOURCE_DIR>/3rdparty/fast_float"
+              COMMAND bash -c "ln -s ${src_glad} <SOURCE_DIR>/3rdparty/glad"
+              COMMAND bash -c "ln -s ${src_fast_float} <SOURCE_DIR>/3rdparty/fast_float"
+              COMMAND ${EXEC} CONF=1 meson setup <BINARY_DIR> <SOURCE_DIR>
+                  --prefix=${MINGW_INSTALL_PREFIX}
+                  --libdir=${MINGW_INSTALL_PREFIX}/lib
+                  --cross-file=${MESON_CROSS}
+                  --default-library=static
+                  -Doptimization=s
+                  -Dd3d11=disabled
+                  -Dvulkan=disabled
+                  -Dvulkan-registry='${MINGW_INSTALL_PREFIX}/share/vulkan/registry/vk.xml'
+                  -Dshaderc=disabled
+                  -Dlcms=disabled
+                  -Dglslang=disabled
+                  -Dopengl=disabled
+                  -Ddemos=false
+                  -Ddebug=false
+                  -Db_ndebug=true
+              BUILD_COMMAND ${EXEC} ninja -C <BINARY_DIR>
+              INSTALL_COMMAND ${EXEC} ninja -C <BINARY_DIR> install
+              LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
+          )
+
+          force_rebuild_git(libplacebo)
+          force_meson_configure(libplacebo)
+          cleanup(libplacebo install)
+          EOF
+
+          cat << 'EOF' > packages/mpv.cmake
+          ExternalProject_Add(mpv
+              DEPENDS
+                  ffmpeg
+                  libass
+                  libiconv
+                  libplacebo
+                  vulkan-header
+              GIT_REPOSITORY https://github.com/mpv-player/mpv.git
+              SOURCE_DIR ${SOURCE_LOCATION}
+              GIT_CLONE_FLAGS "--filter=tree:0"
+              UPDATE_COMMAND ""
+              CONFIGURE_COMMAND ${EXEC} CONF=1 meson setup <BINARY_DIR> <SOURCE_DIR>
+                  --prefix=${MINGW_INSTALL_PREFIX}
+                  --libdir=${MINGW_INSTALL_PREFIX}/lib
+                  --cross-file=${MESON_CROSS}
+                  --default-library=shared
+                  -Db_ndebug=true
+                  -Doptimization=s
+                  -Db_lto=true
+                  ${mpv_lto_mode}
+                  -Dlibmpv=true
+                  -Dpdf-build=disabled
+                  -Dmanpage-build=disabled
+                  -Dhtml-build=disabled
+                  -Dlua=disabled
+                  -Djavascript=disabled
+                  -Dsdl2-gamepad=disabled
+                  -Dlibarchive=disabled
+                  -Dlibbluray=disabled
+                  -Ddvdnav=disabled
+                  -Duchardet=disabled
+                  -Drubberband=disabled
+                  -Dlcms2=disabled
+                  -Dopenal=disabled
+                  -Dspirv-cross=disabled
+                  -Dvulkan=disabled
+                  -Dvapoursynth=disabled
+                  -Dsubrandr=disabled
+                  -Dsixel=disabled
+                  -Dlibcurl=disabled
+                  -Dgl=disabled
+                  -Dplain-gl=disabled
+                  -Degl=disabled
+                  -Dd3d11=disabled
+                  -Ddirect3d=disabled
+                  -Dd3d-hwaccel=disabled
+                  -Dd3d9-hwaccel=disabled
+                  -Dcuda-hwaccel=disabled
+                  -Dcuda-interop=disabled
+                  -Damf=disabled
+                  -Dvaapi=disabled
+                  -Dvdpau=disabled
+                  -Dwin32-smtc=disabled
+                  -Dshaderc=disabled
+                  -Dc_args='-Wno-error=int-conversion -Os'
+                  -Dc_link_args='-lstdc++'
+              BUILD_COMMAND ${EXEC} LTO_JOB=1 PDB=1 ninja -C <BINARY_DIR>
+              INSTALL_COMMAND ""
+              LOG_DOWNLOAD 1 LOG_UPDATE 1 LOG_CONFIGURE 1 LOG_BUILD 1 LOG_INSTALL 1
+          )
+
+          ExternalProject_Add_Step(mpv strip-binary
+              DEPENDEES build
+              ${mpv_add_debuglink}
+              COMMENT "Stripping mpv binaries"
+          )
+
+          ExternalProject_Add_Step(mpv copy-binary
+              DEPENDEES strip-binary
+              COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/mpv.exe                           ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv.exe
+              COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/mpv.com                           ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv.com
+              COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/etc/mpv-register.bat              ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv-register.bat
+              COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/etc/mpv-unregister.bat            ${CMAKE_CURRENT_BINARY_DIR}/mpv-package/mpv-unregister.bat
+              ${mpv_copy_debug}
+              COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv-2.dll                      ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv-2.dll
+              COMMAND ${CMAKE_COMMAND} -E copy <BINARY_DIR>/libmpv.dll.a                      ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/libmpv.dll.a
+              COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/client.h              ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/client.h
+              COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/stream_cb.h           ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/stream_cb.h
+              COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/render.h              ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/render.h
+              COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/render_gl.h           ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/render_gl.h
+              COMMENT "Copying mpv binaries and headers"
+          )
+          EOF
+
+      - name: Configure CMake
+        run: |
+          cmake -DTARGET_ARCH=x86_64-w64-mingw32 -DCOMPILER_TOOLCHAIN=gcc -DALWAYS_REMOVE_BUILDFILES=ON -DSINGLE_SOURCE_LOCATION= -B build -H mpv-winbuild
+
+      - name: Build mpv
+        run: |
+          ninja -C build mpv
+
+      - name: Show configure logs on failure
+        if: failure()
+        run: |
+          find build/ -name "meson-log.txt" -exec echo "=== {} ===" \; -exec cat {} \;
+          find build/ -name "config.log" -exec echo "=== {} ===" \; -exec cat {} \;
+
+      - name: Strip libmpv-2.dll to reduce size
+        run: |
+          x86_64-w64-mingw32-strip -s build/mpv-dev/libmpv-2.dll || true
+          ls -lh build/mpv-dev/libmpv-2.dll
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/')
+        with:
+          tag_name: libmpv-audio-test-release
+          name: libmpv-audio-test
+          files: build/mpv-dev/libmpv-2.dll
