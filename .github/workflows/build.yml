@@ -37,8 +37,8 @@ jobs:
 
           cat << 'EOF' > packages/libass.cmake
           ExternalProject_Add(libass
-              SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libass-stub
-              CONFIGURE_COMMAND ${EXEC} CONF=1 cmake -H<SOURCE_DIR> -B<BINARY_DIR>
+              SOURCE_DIR ${CMAKE_SOURCE_DIR}/packages/libass-stub
+              CONFIGURE_COMMAND ${EXEC} CONF=1 cmake -S <SOURCE_DIR> -B <BINARY_DIR>
                   -G Ninja
                   -DCMAKE_BUILD_TYPE=Release
                   -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
@@ -242,28 +242,57 @@ jobs:
               COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/stream_cb.h           ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/stream_cb.h
               COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/render.h              ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/render.h
               COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/include/mpv/render_gl.h           ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev/include/mpv/render_gl.h
-              COMMENT "Copying mpv binaries and headers"
+              COMMENT "Copying mpv binaries"
           )
+
+          set(RENAME ${CMAKE_CURRENT_BINARY_DIR}/mpv-prefix/src/rename.sh)
+          file(WRITE ${RENAME}
+          "cd \$1
+          GIT=\$(git rev-parse --short=10 HEAD)
+          mv \$2 \$2-git-\\\${GIT}")
+
+          ExternalProject_Add_Step(mpv copy-package-dir
+              DEPENDEES copy-binary
+              COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-package ${CMAKE_BINARY_DIR}/mpv-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+              COMMAND bash ${RENAME} <SOURCE_DIR> ${CMAKE_BINARY_DIR}/mpv-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+
+              COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-debug ${CMAKE_BINARY_DIR}/mpv-debug-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+              COMMAND bash ${RENAME} <SOURCE_DIR> ${CMAKE_BINARY_DIR}/mpv-debug-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+
+              COMMAND mv ${CMAKE_CURRENT_BINARY_DIR}/mpv-dev ${CMAKE_BINARY_DIR}/mpv-dev-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+              COMMAND bash ${RENAME} <SOURCE_DIR> ${CMAKE_BINARY_DIR}/mpv-dev-${TARGET_CPU}${x86_64_LEVEL}-${BUILDDATE}
+              COMMENT "Moving mpv package folder"
+              LOG 1
+          )
+
+          force_rebuild_git(mpv)
+          force_meson_configure(mpv)
+          cleanup(mpv copy-package-dir)
           EOF
 
       - name: Configure CMake
-        run: |
-          cmake -DTARGET_ARCH=x86_64-w64-mingw32 -DCOMPILER_TOOLCHAIN=gcc -DALWAYS_REMOVE_BUILDFILES=ON -DSINGLE_SOURCE_LOCATION= -B build -H mpv-winbuild
+        working-directory: mpv-winbuild
+        run: cmake -DTARGET_ARCH=x86_64-w64-mingw32 -G Ninja -S . -B build
 
       - name: Build mpv
+        working-directory: mpv-winbuild
         run: |
+          git config --global user.email "builder@example.com"
+          git config --global user.name "Builder"
+          ninja -C build gcc
           ninja -C build mpv
 
       - name: Show configure logs on failure
         if: failure()
+        working-directory: mpv-winbuild
         run: |
-          find build/ -name "meson-log.txt" -exec echo "=== {} ===" \; -exec cat {} \;
-          find build/ -name "config.log" -exec echo "=== {} ===" \; -exec cat {} \;
+          find build -name "*.log" -exec echo "=== {} ===" \; -exec cat {} + || true
+          find build -name "meson-log.txt" -exec echo "=== {} ===" \; -exec cat {} + || true
 
       - name: Strip libmpv-2.dll to reduce size
+        working-directory: mpv-winbuild
         run: |
-          x86_64-w64-mingw32-strip -s build/mpv-dev/libmpv-2.dll || true
-          ls -lh build/mpv-dev/libmpv-2.dll
+          x86_64-w64-mingw32-strip -s build/mpv-dev-*/libmpv-2.dll || true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -271,4 +300,5 @@ jobs:
         with:
           tag_name: libmpv-audio-test-release
           name: libmpv-audio-test
-          files: build/mpv-dev/libmpv-2.dll
+          make_latest: true
+          files: mpv-winbuild/build/mpv-dev-*/libmpv-2.dll
